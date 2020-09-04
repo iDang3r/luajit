@@ -483,6 +483,15 @@
 |.endmacro
 |
 |//-----------------------------------------------------------------------
+|
+|// Check L->base <= L->top (balet: BAse is Less or Equal to Top)
+|// and handle in case of error.
+|.macro assert_balet, base, top
+|  cmp base, top			// Check if base <= top.
+|  jbe >9				// Proceed if everything's OK.
+|  call extern abort			// Make coredump if it's not.
+|9: // Proceed if L->base <= L->top
+|.endmacro
 
 /* Generate subroutines used by opcodes and other parts of the VM. */
 /* The .code_sub section should be last to help static branch prediction. */
@@ -559,6 +568,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  xor eax, eax			// Ok return status for vm_pcall.
   |
   |->vm_leave_unw:
+  |  mov RA, L:RB->top			// RA can be freely used here.
+  |  assert_balet L:RB->base, RA	// Check if L->base <= L->top (RA).
   |  restoreregs
   |  ret
   |
@@ -614,6 +625,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov GL:RB, L:DISPATCH->glref
   |  mov dword GL:RB->cur_L, L:DISPATCH
   |  mov dword GL:RB->vmstate, ~LJ_VMST_C
+  |  mov L:RB, L:DISPATCH		// Need for the check later.
   |  jmp ->vm_leave_unw
   |
   |->vm_unwind_rethrow:
@@ -784,6 +796,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov [DISPATCH+DISPATCH_GL(cur_L)], L:RB
   |  set_vmstate INTERP
   |  mov BASE, L:RB->base		// BASE = old base (used in vmeta_call).
+  |  assert_balet BASE, L:RB->top	// Check if L->base (BASE) <= L->top.
   |  add PC, RA
   |  sub PC, BASE			// PC = frame delta + frame type
   |
@@ -3226,6 +3239,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.if X64
   |  mov rax, CTSTATE->cb.gpr[0]
   |  movsd xmm0, qword CTSTATE->cb.fpr[0]
+  |  mov L:RB, L:RA			// Need for the check later.
   |  jmp ->vm_leave_unw
   |.else
   |  mov L:RB, SAVE_L
@@ -5432,6 +5446,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     }
     |  ja ->vm_growstack_c		// Need to grow stack.
     |  set_vmstate C
+    |  // Caveat: CARG2 may be BASE, but RD (eax) is fine.
+    |  assert_balet L:RB->base, RD	// Check if L->base <= L->top (RD).
     if (op == BC_FUNCC) {
       |  call KBASEa			// (lua_State *L)
     } else {
@@ -5440,6 +5456,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     }
     |  // nresults returned in eax (RD).
     |  mov BASE, L:RB->base
+    |  assert_balet BASE, L:RB->top	// Check if L->base (BASE) <= L->top.
     |  mov [DISPATCH+DISPATCH_GL(cur_L)], L:RB
     |  set_vmstate INTERP
     |  lea RA, [BASE+RD*8]
