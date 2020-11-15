@@ -341,7 +341,7 @@ static LJ_AINLINE uint32_t lj_getu32(const void *v)
 /* Internal assertions. */
 #if defined(LUA_USE_ASSERT) || defined(LUA_USE_APICHECK)
 #define lj_assert_check(g, c, ...) \
-  ((c) ? (void)0 : \
+  ((c) ? 0 : \
    (lj_assert_fail((g), __FILE__, __LINE__, __func__, __VA_ARGS__), 0))
 #define lj_checkapi(c, ...)	lj_assert_check(G(L), (c), __VA_ARGS__)
 #else
@@ -367,6 +367,7 @@ static LJ_AINLINE uint32_t lj_getu32(const void *v)
 #define lua_assert(c)		((void)0)
 #endif
 #endif
+#define api_check(l, e) lua_assert(e)
 
 /* Static assertions. */
 #define LJ_ASSERT_NAME2(name, line)	name ## line
