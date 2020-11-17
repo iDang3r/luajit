@@ -2,7 +2,7 @@
 # Major portions taken verbatim or adapted from the uJIT.
 # Copyright (C) 2015-2019 IPONWEB Ltd.
 
-# See the rationale in the root CMakeLists.txt
+# See the rationale in the root CMakeLists.txt.
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
 set(LUAJIT_TOOLS_DEPS)
