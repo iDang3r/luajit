@@ -198,13 +198,13 @@ HOST_CC= $(CC)
 HOST_RM= rm -f
 # If left blank, minilua is built and used. You can supply an installed
 # copy of (plain) Lua 5.1 or 5.2, plus Lua BitOp. E.g. with: HOST_LUA=lua
-HOST_LUA= luajit
+HOST_LUA= 
 
 HOST_XCFLAGS= -I.
 HOST_XLDFLAGS=
 HOST_XLIBS=
 HOST_ACFLAGS= $(CCOPTIONS) $(HOST_XCFLAGS) $(TARGET_ARCH) $(HOST_CFLAGS)
-HOST_ALDFLAGS= $(LDOPTIONS) $(HOST_XLDFLAGS) $(HOST_LDFLAGS)
+HOST_ALDFLAGS= $(LDOPTIONS) $(HOST_XLDFLAGS) $(HOST_LDFLAGS) ${LIB_FUZZING_ENGINE}
 HOST_ALIBS= $(HOST_XLIBS) $(LIBS) $(HOST_LIBS)
 
 STATIC_CC = $(CROSS)$(CC)
@@ -381,7 +381,7 @@ endif
 ##############################################################################
 
 MINILUA_O= host/minilua.o
-MINILUA_LIBS= -lm
+MINILUA_LIBS= -lm ${LIB_FUZZING_ENGINE}
 MINILUA_T= host/minilua
 MINILUA_X= $(MINILUA_T)
 
