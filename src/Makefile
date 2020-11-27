@@ -198,7 +198,7 @@ HOST_CC= $(CC)
 HOST_RM= rm -f
 # If left blank, minilua is built and used. You can supply an installed
 # copy of (plain) Lua 5.1 or 5.2, plus Lua BitOp. E.g. with: HOST_LUA=lua
-HOST_LUA=
+HOST_LUA= luajit
 
 HOST_XCFLAGS= -I.
 HOST_XLDFLAGS=
