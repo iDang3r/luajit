@@ -31,6 +31,10 @@
 #include "lj_vmevent.h"
 #include "lj_target.h"
 
+// ---------
+#include <stdio.h>
+// ---------
+
 /* -- Error handling ------------------------------------------------------ */
 
 /* Synchronous abort with error message. */
@@ -637,6 +641,155 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
   }
 }
 
+// ------------------------------------ Print start info ------------------------------------
+void print_jit_state_info(lua_State *lua_state) {
+
+  if (lua_state == NULL) {
+    printf("Error! lua_State == nullptr in print_jit_state_info called!\n");
+    abort();
+  }
+
+  jit_State *jit_state = L2J(lua_state);
+  if (jit_state == NULL) {
+    printf("Error! jit_State == nullptr in print_jit_state_info called!\n");
+    abort();
+  }
+
+  printf("\n------------ FROM trace_state---------------\n"
+            "\tTraceno: %d\n"
+            "\tGCtrace::startins: %x;\n"
+            "\tGCtrace::startpc: %p;\n"
+            "\tGCtrace::startpt: %p\n"
+            "\tCurrent pc: %x\n",
+  jit_state->cur.traceno, jit_state->cur.startins, jit_state->cur.startpc.ptr32, jit_state->cur.startpt.gcptr32, jit_state->pc);
+}
+
+// ------------------------------------- Print file -------------------------
+int file_size(const char* file_name) {
+    struct stat file_info;
+    stat(file_name, &file_info);
+    return file_info.st_size;
+}
+
+enum find{
+    START = 1,
+    ALL = -1
+};
+
+int find_lines(int first, int count_lines, char* ptr, char** start_pos, char** end_pos, char* eof) {
+    
+    first--;
+
+    for (; first > 0; first--) {
+        while(ptr != eof && *(ptr++) != '\n') {
+        }
+    }
+    if (ptr == eof) {
+        return 1;
+    }
+
+    *start_pos = ptr;
+
+    for (; count_lines != 0; count_lines--) {
+        while(ptr != eof && *(ptr++) != '\n') {
+        }
+        if (ptr == eof) {
+            break;
+        }
+    }
+    
+    *end_pos = ptr - 1;
+
+    return 0;
+}
+
+int find_lines_in_file(const char* file_name, int first_line, int line_num) {
+    
+    if (line_num == ALL) {
+    }
+    else if (line_num < 1 || first_line < 1) {
+        return 1;
+    }
+
+    FILE* f = fopen(file_name, "r");
+    if (!f) {
+        printf("Error while reading the file!\n");
+        return 1;
+    }
+
+    const int size = file_size(file_name);    
+    char* buffer = calloc(1, size);
+    
+    int bytes_read = fread(buffer, 1, size, f);
+    fclose(f);
+    if (bytes_read != size) {
+        printf("It's impossible to read the whole file!\n");
+        free(buffer);
+        return 1;
+    }
+
+    char* start_pos = 0;
+    char* end_pos   = 0;
+    if (find_lines(first_line, line_num, buffer, &start_pos, &end_pos, buffer + size)) {
+        free(buffer);
+        return 1;
+    }
+
+    while((start_pos) <= end_pos) {
+        putchar(*(start_pos++));
+    }
+
+    free(buffer);
+
+    return 0;
+}
+
+// --------------------------------------------------------------------------
+
+void print_proto(lua_State *lua_state) {
+
+  if (lua_state == NULL) {
+    printf("Error! lua_State == nullptr in print_proto!\n");
+    abort();
+  }
+
+  jit_State *jit_state = L2J(lua_state);
+  if (jit_state == NULL) {
+    printf("Error! jit_State == nullptr in print_proto!\n");
+    abort();
+  }
+
+  GCproto* proto = jit_state->pt;
+  if (proto == NULL) {
+    printf("Error! proto == nullptr in print_proto!\n");
+    abort();
+  }
+
+  char* file_name = (uintptr_t)((char*)proto->chunkname.gcptr32 + sizeof(GCstr));
+  file_name += 1;                               // skip initial '@'
+  printf("\n\nIn function from line %d in file \"%s\"\n\n", proto->firstline, file_name);
+  // find_lines_in_file(file_name, proto->firstline, 1);
+  find_lines_in_file(file_name, proto->firstline, proto->numline + 1);
+
+}
+
+void get_func_info(const char* func_name, lua_State* L) {
+  lua_Debug ar;
+  lua_getfield(L, LUA_GLOBALSINDEX, func_name);  /* get global 'f' */
+  lua_getinfo(L, ">S", &ar);
+  printf("%d\n", ar.linedefined);
+}
+
+void print_pc_info(jit_State *jit_state) {
+    printf("\n------------ FROM lj_trace_ins:---------------\n"
+            "\tPC_ptr: %p;\n"
+            "\tPC: %u\n"
+            "\tTrace number: %u\n\n",
+    jit_state->pc, *jit_state->pc, jit_state->cur.traceno);
+}
+
+// -----------------------------------------------------------------------------
+
 /* State machine for the trace compiler. Protected callback. */
 static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 {
@@ -649,6 +802,13 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
       J->state = LJ_TRACE_RECORD;  /* trace_start() may change state. */
       trace_start(J);
       lj_dispatch_update(J2G(J));
+
+      printf("--------------- START RECORD %u: --------------\n", J->cur.traceno);
+      // print_proto(L);
+      print_jit_state_info(L);
+      get_func_info("called_in_cycle", L);
+      printf("--------------- That's it ------------------\n");
+
       break;
 
     case LJ_TRACE_RECORD:
@@ -681,6 +841,12 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 	  J->cur.linktype = LJ_TRLINK_NONE;
 	  J->loopref = J->cur.nins;
 	  J->state = LJ_TRACE_RECORD;  /* Try to continue recording. */
+
+      printf("--------------- END RECORD %u: --------------\n", J->cur.traceno);
+      // print_proto(L);
+      print_jit_state_info(L);
+      printf("--------------- That's it ------------------\n");
+
 	  break;
 	}
 	J->loopref = J->chain[IR_LOOP];  /* Needed by assembler. */
