@@ -15,6 +15,8 @@
 #include "lj_frame.h"
 #include "lj_bc.h"
 #include "lj_strfmt.h"
+#include "lj_dispatch.h"
+#include <stdio.h>
 #if LJ_HASJIT
 #include "lj_jit.h"
 #endif
@@ -421,8 +423,52 @@ LUA_API const char *lua_setlocal(lua_State *L, const lua_Debug *ar, int n)
   return name;
 }
 
+void check(const uint8_t cond, const char* msg) {
+  if (cond) {
+    puts(msg);
+    abort();
+  }
+}
+
+#define ASSERT(cond, msg) if(!cond) {       \
+                           printf(msg);   \
+                           abort();       \
+                          }
+
 int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
 {
+
+  jit_State* jit = L2J(L);                                                            // Get jit_State
+
+  ASSERT(jit, "Failed in lj_debug_getinfo! jit_State == nullptr!\n")                  // Check jit_State pointer
+  
+  int32_t cur_trace_no = L2GG(L)->g.vmstate;                                          // Get number of current trace
+
+
+  if (cur_trace_no >= (int32_t)jit->sizetrace) {                                        // Check whether the current trace number is 
+    printf("Error! Trace num %d is out of range %u!\n", cur_trace_no, jit->sizetrace);  // out of range of the array with traces
+    abort();
+  }
+
+/* Made some changed with options 's', 'n' if in_trace:
+      event -> traceno
+      linedefined -> startpc
+      lastlinedefined -> trace->startpt 
+      currentline -> startins
+      namewhat -> "trace"
+*/
+
+  const uint8_t in_trace = cur_trace_no > 0;                                            // Set the flag if we are executing a trace
+  GCtrace* trace = NULL;
+  if (in_trace) {
+    trace = gco2trace(gcref(jit->trace[cur_trace_no]));                        // Get current trace from the array of traces
+    ASSERT(trace, "Error! Invalid trace.\n")
+    printf("from trace %d:\n", trace->traceno);
+    
+    ar->event = (int)trace->traceno;                                                       // Store the number of the current trace
+  }
+
+
   int opt_f = 0, opt_L = 0;
   TValue *frame = NULL;
   TValue *nextframe = NULL;
@@ -456,8 +502,14 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
 	GCstr *name = proto_chunkname(pt);
 	ar->source = strdata(name);
 	lj_debug_shortname(ar->short_src, name, pt->firstline);
-	ar->linedefined = (int)firstline;
-	ar->lastlinedefined = (int)(firstline + pt->numline);
+  if (in_trace) {
+    ar->linedefined = (int)trace->startpc.ptr32;                         // store trace start program counter in "linedefined"
+    ar->lastlinedefined = (int)trace->startpt.gcptr32;                   // store proto start program counter in "lastlinedefined"
+  }
+  else {
+    ar->linedefined = (int)firstline;
+	  ar->lastlinedefined = (int)(firstline + pt->numline);
+  }
 	ar->what = (firstline || !pt->numline) ? "Lua" : "main";
       } else {
 	ar->source = "=[C]";
@@ -470,7 +522,12 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
 	ar->what = "C";
       }
     } else if (*what == 'l') {
-      ar->currentline = frame ? lj_debug_frameline(L, fn, nextframe) : -1;
+      if (in_trace) {
+         ar->currentline = (int)trace->startins;
+       }
+       else {
+         ar->currentline = frame ? lj_debug_frameline(L, fn, nextframe) : -1;
+      }
     } else if (*what == 'u') {
       ar->nups = fn->c.nupvalues;
       if (ext) {
@@ -484,7 +541,13 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
 	}
       }
     } else if (*what == 'n') {
-      ar->namewhat = frame ? lj_debug_funcname(L, frame, &ar->name) : NULL;
+      if (in_trace) {
+        ar->namewhat = "trace";
+        lj_debug_funcname(L, frame, &ar->name);
+      }
+      else {
+        ar->namewhat = frame ? lj_debug_funcname(L, frame, &ar->name) : NULL;
+      }
       if (ar->namewhat == NULL) {
 	ar->namewhat = "";
 	ar->name = NULL;

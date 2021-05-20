@@ -33,6 +33,8 @@
 
 // ---------
 #include <stdio.h>
+#include <sys/stat.h>
+#include <stdlib.h>
 // ---------
 
 /* -- Error handling ------------------------------------------------------ */
@@ -660,8 +662,9 @@ void print_jit_state_info(lua_State *lua_state) {
             "\tGCtrace::startins: %x;\n"
             "\tGCtrace::startpc: %p;\n"
             "\tGCtrace::startpt: %p\n"
-            "\tCurrent pc: %x\n",
-  jit_state->cur.traceno, jit_state->cur.startins, jit_state->cur.startpc.ptr32, jit_state->cur.startpt.gcptr32, jit_state->pc);
+            "\tCurrent pc: %x\n"
+            "\tState: %d\n",
+  jit_state->cur.traceno, jit_state->cur.startins, jit_state->cur.startpc.ptr32, jit_state->cur.startpt.gcptr32, jit_state->pc, jit_state->state);
 }
 
 // ------------------------------------- Print file -------------------------
@@ -794,6 +797,9 @@ void print_pc_info(jit_State *jit_state) {
 static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 {
   jit_State *J = (jit_State *)ud;
+
+  // print_jit_state_info(L);
+
   UNUSED(dummy);
   do {
   retry:
@@ -803,12 +809,12 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
       trace_start(J);
       lj_dispatch_update(J2G(J));
 
+/*
       printf("--------------- START RECORD %u: --------------\n", J->cur.traceno);
       // print_proto(L);
       print_jit_state_info(L);
-      get_func_info("called_in_cycle", L);
       printf("--------------- That's it ------------------\n");
-
+*/
       break;
 
     case LJ_TRACE_RECORD:
@@ -842,11 +848,12 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 	  J->loopref = J->cur.nins;
 	  J->state = LJ_TRACE_RECORD;  /* Try to continue recording. */
 
+/*
       printf("--------------- END RECORD %u: --------------\n", J->cur.traceno);
       // print_proto(L);
       print_jit_state_info(L);
       printf("--------------- That's it ------------------\n");
-
+*/
 	  break;
 	}
 	J->loopref = J->chain[IR_LOOP];  /* Needed by assembler. */
