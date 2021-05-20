@@ -423,13 +423,6 @@ LUA_API const char *lua_setlocal(lua_State *L, const lua_Debug *ar, int n)
   return name;
 }
 
-void check(const uint8_t cond, const char* msg) {
-  if (cond) {
-    puts(msg);
-    abort();
-  }
-}
-
 #define ASSERT(cond, msg) if(!cond) {       \
                            printf(msg);   \
                            abort();       \
